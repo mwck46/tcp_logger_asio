@@ -14,6 +14,8 @@ Point of interest:
 #include <boost/date_time.hpp>
 #include <boost/bind.hpp>
 #include <boost/lockfree/queue.hpp>
+#include <boost/thread.hpp>
+#include <boost/thread/scoped_thread.hpp>
 
 using boost::asio::ip::tcp;
 
@@ -116,9 +118,17 @@ class server
 public:
   server(boost::asio::io_context& io_context, short port) : acceptor_(io_context, tcp::endpoint(tcp::v4(), port))
   {
+    boost::scoped_thread<> t{ boost::thread{&server::thread_prod, this}};
     do_accept();
   }
-  
+
+  void thread_prod()
+  {
+    for (int i = 0; i < 5; ++i)
+    {
+      std::cout << i << '\n';
+    }
+  }
 
 private:
   void do_accept()
