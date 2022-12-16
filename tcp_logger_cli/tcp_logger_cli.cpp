@@ -141,13 +141,17 @@ private:
         std::string *str;
         std::string clientIp = socket.remote_endpoint().address().to_string();
 
-        std::ofstream ofile;
-        ofile.open(clientIp + ".txt", std::ios::app);
+        //std::ofstream ofile;
+        //ofile.open(clientIp + ".txt", std::ios::app);
+        std::string filename = clientIp + ".txt";
+        FILE * ofile;
+        oFile = fopen (filename.c_str(), "w");
         while (!_nonblockQueue.empty())
         {
            _nonblockQueue.pop(str);
            //std::cout << *str << std::endl;
-           ofile << *str;
+           //ofile << *str;
+           std::fprintf(ofile, "%s", *str);
            delete str;
         }
         ofile.close();
