@@ -3,10 +3,12 @@ Point of interest:
 1) async_read_some(), async_read(), async_read_until()
 2) boost::lockfree::queue
 *****************************************************/
+#ifdef _MSC_VER
+#define _CRT_SECURE_NO_WARNINGS //fopen
+#endif
 
 #include <cstdio>
 #include <iostream>
-#include <fstream>
 #include <memory>
 #include <utility>
 #include <string>
@@ -16,6 +18,8 @@ Point of interest:
 #include <boost/lockfree/queue.hpp>
 #include <boost/thread.hpp>
 #include <boost/thread/scoped_thread.hpp>
+
+
 
 using boost::asio::ip::tcp;
 
@@ -141,20 +145,17 @@ private:
         std::string *str;
         std::string clientIp = socket.remote_endpoint().address().to_string();
 
-        //std::ofstream ofile;
-        //ofile.open(clientIp + ".txt", std::ios::app);
         std::string filename = clientIp + ".txt";
-        FILE * ofile;
-        oFile = fopen (filename.c_str(), "w");
+        FILE * ofile = fopen (filename.c_str(), "a");
         while (!_nonblockQueue.empty())
         {
            _nonblockQueue.pop(str);
            //std::cout << *str << std::endl;
            //ofile << *str;
-           std::fprintf(ofile, "%s", *str);
+           std::fprintf(ofile, "%s", str->c_str());
            delete str;
         }
-        ofile.close();
+        fclose(ofile);
       }
 
       if (!ec)
