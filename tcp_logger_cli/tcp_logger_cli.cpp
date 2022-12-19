@@ -12,20 +12,18 @@ Point of interest:
 #include <memory>
 #include <utility>
 #include <string>
+
 #include <boost/asio.hpp>
 #include <boost/date_time.hpp>
 #include <boost/bind.hpp>
-#include <boost/lockfree/queue.hpp>
+
 #include <boost/thread.hpp>
 #include <boost/thread/scoped_thread.hpp>
-
+#include <boost/chrono.hpp>
 
 
 using boost::asio::ip::tcp;
 
-
-// Only store pointer to object in boost::lockfree::queue, instead of the object directly
-boost::lockfree::queue<std::string*> _nonblockQueue(100);
 
 class session : public std::enable_shared_from_this<session>
 {
@@ -68,11 +66,21 @@ private:
       std::string clientIp = this->socket_.remote_endpoint().address().to_string();
 
       // print to standard output
-      std::printf("[%s] %s: %s\r\n", to_simple_string(timeLocal).c_str(), clientIp.c_str(), line.c_str());
 
       snprintf(_logMsg, sizeof(_logMsg), "[%s] %s: %s", to_simple_string(timeLocal).c_str(), clientIp.c_str(), line.c_str());
-      std::string *msg = new std::string("[" + to_simple_string(timeLocal) + "] " + clientIp + ": " + line + "");
-      _nonblockQueue.push(msg);
+
+      unsigned short p = socket_.local_endpoint().port();
+      char filename[256];
+      snprintf(filename, sizeof(filename), "port_%hu.log", p);
+      FILE * ofile = fopen(filename, "a");
+      if (!ofile)
+      {
+        std::printf("Cannot open log file");
+        return;
+      }
+      std::printf("%s\n", _logMsg);
+      std::fprintf(ofile, "%s", _logMsg);
+      fclose(ofile);
     }
   }
 
@@ -122,42 +130,15 @@ class server
 public:
   server(boost::asio::io_context& io_context, short port) : acceptor_(io_context, tcp::endpoint(tcp::v4(), port))
   {
-    boost::scoped_thread<> t{ boost::thread{&server::thread_prod, this}};
     do_accept();
   }
 
-  void thread_prod()
-  {
-    for (int i = 0; i < 5; ++i)
-    {
-      std::cout << i << '\n';
-    }
-  }
 
 private:
   void do_accept()
   {
     acceptor_.async_accept([this](boost::system::error_code ec, tcp::socket socket)
     {
-
-      if (!_nonblockQueue.empty()) 
-      {
-        std::string *str;
-        std::string clientIp = socket.remote_endpoint().address().to_string();
-
-        std::string filename = clientIp + ".txt";
-        FILE * ofile = fopen (filename.c_str(), "a");
-        while (!_nonblockQueue.empty())
-        {
-           _nonblockQueue.pop(str);
-           //std::cout << *str << std::endl;
-           //ofile << *str;
-           std::fprintf(ofile, "%s", str->c_str());
-           delete str;
-        }
-        fclose(ofile);
-      }
-
       if (!ec)
       {
         std::make_shared<session>(std::move(socket))->start();
