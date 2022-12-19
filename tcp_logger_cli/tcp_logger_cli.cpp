@@ -151,26 +151,30 @@ private:
   tcp::acceptor acceptor_;
 };
 
+void worker(int port) {
+  boost::asio::io_context io_context;
+  server s(io_context, port);
+  io_context.run();
+}
+
 int main(int argc, char* argv[])
 {
   try
   {
-    int port = 50001;
-    if (argc == 2)
-    {
-      port = std::atoi(argv[1]);
-    }
-    else
-    {
-      //std::cerr << "Usage: async_tcp_echo_server <port>\n";
-      //return 1;
+    const int numPort = 5;
+    const int ports[numPort] = { 40001, 41001, 40002, 41002, 50001 };
+    boost::thread *threads[numPort];
+
+    // Creation
+    for(int i = 0; i < numPort; i++) {
+      threads[i] = new boost::thread(worker, ports[i]);
     }
 
-    boost::asio::io_context io_context;
-
-    server s(io_context, port);
-
-    io_context.run();
+    // Cleanup
+    for(int i = 0; i < numPort; i++) {
+        threads[i]->join();
+        delete threads[i];
+    }
   }
   catch (std::exception& e)
   {
