@@ -56,18 +56,11 @@ private:
   {
     if (!ec)
     {
-      // Read from asio::streambuf -> std::istream -> std::string
-      std::istream is(&_streamBufr);
-      std::string line;
-      std::getline(is, line);
-
       // record receiving time
       boost::posix_time::ptime timeLocal = boost::posix_time::second_clock::local_time();
       std::string clientIp = this->socket_.remote_endpoint().address().to_string();
 
-      // print to standard output
-
-      snprintf(_logMsg, sizeof(_logMsg), "[%s] %s: %s", to_simple_string(timeLocal).c_str(), clientIp.c_str(), line.c_str());
+      snprintf(_logMsg, sizeof(_logMsg), "[%s] %s: %s", to_simple_string(timeLocal).c_str(), clientIp.c_str(), dynBuf.c_str());
 
       unsigned short p = socket_.local_endpoint().port();
       char filename[256];
@@ -78,7 +71,7 @@ private:
         std::printf("Cannot open log file");
         return;
       }
-      std::printf("%s\n", _logMsg);
+      //std::printf("%s\n", _logMsg);
       std::fprintf(ofile, "%s", _logMsg);
       fclose(ofile);
     }
@@ -102,7 +95,12 @@ private:
     
     // async_read_until() 
     //    call handler until delimiter is reached. If delimiter is not reached, it still calls handler when connection is closed
-    async_read_until(socket_, _streamBufr, "\n", boost::bind(&session::async_read_until_handler, shared_from_this(), boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred));
+    //
+    // 1) Use stream buffer
+    //async_read_until(socket_, _streamBufr, "\n", boost::bind(&session::async_read_until_handler, shared_from_this(), boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred));
+    //
+    // 2) Use dynamic buffer (cleaner)
+    async_read_until(socket_, boost::asio::dynamic_buffer(dynBuf), "\n", boost::bind(&session::async_read_until_handler, shared_from_this(), boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred));
   }
 
   void do_write(std::size_t length)
@@ -123,13 +121,16 @@ private:
   char _logMsg[100];
 
   boost::asio::streambuf _streamBufr;
+  std::string dynBuf;
 };
-
 class server
 {
 public:
   server(boost::asio::io_context& io_context, short port) : acceptor_(io_context, tcp::endpoint(tcp::v4(), port))
   {
+    char filename[256];
+    snprintf(filename, sizeof(filename), "port_%hu.log", port);
+    std::printf("Listening to port %hu, log file: %s\n", port, filename);
     do_accept();
   }
 
@@ -153,7 +154,7 @@ private:
 
 void worker(int port) {
   boost::asio::io_context io_context;
-  server s(io_context, port);
+  server s(io_context, (short)port);
   io_context.run();
 }
 
@@ -183,3 +184,119 @@ int main(int argc, char* argv[])
 
   return 0;
 }
+
+
+/*
+class session
+{
+public:
+  session(boost::asio::io_service& io_service): socket_(io_service)
+  {
+  }
+
+  tcp::socket& socket()
+  {
+    return socket_;
+  }
+
+  void start()
+  {
+    std::cout << "starting" << std::endl;
+    boost::asio::async_read_until(socket_, _streamBufr, ' ',
+      boost::bind(&session::handle_read, this,
+        boost::asio::placeholders::error,
+        boost::asio::placeholders::bytes_transferred));
+  }
+
+  void handle_read(const boost::system::error_code& error, size_t bytes_transferred)
+  {
+    std::cout << "handling read" << std::endl;
+    if (!error)
+    {
+      boost::asio::async_write(socket_,
+        boost::asio::buffer(data_, bytes_transferred),
+        boost::bind(&session::handle_write, this,
+          boost::asio::placeholders::error));
+    }
+    else
+    {
+      delete this;
+    }
+  }
+
+  void handle_write(const boost::system::error_code& error)
+  {
+    if (!error)
+    {
+        socket_.async_read_some(boost::asio::buffer(data_, max_length),
+            boost::bind(&session::handle_read, this,
+              boost::asio::placeholders::error,
+              boost::asio::placeholders::bytes_transferred));
+    }
+    else
+    {
+      delete this;
+    }
+  }
+
+private:
+  tcp::socket socket_;
+  enum { max_length = 1024 };
+  char data_[max_length];
+  boost::asio::streambuf _streamBufr;
+};
+class server
+{
+public:
+  server(boost::asio::io_service& io_service, short port)
+    : io_service_(io_service),
+      acceptor_(io_service, tcp::endpoint(tcp::v4(), port))
+  {
+    session* new_session = new session(io_service_);
+    acceptor_.async_accept(new_session->socket(),
+        boost::bind(&server::handle_accept, this, new_session,
+          boost::asio::placeholders::error));
+  }
+
+  void handle_accept(session* new_session,
+      const boost::system::error_code& error)
+  {
+    if (!error)
+    {
+      new_session->start();
+      new_session = new session(io_service_);
+      acceptor_.async_accept(new_session->socket(),
+          boost::bind(&server::handle_accept, this, new_session,
+            boost::asio::placeholders::error));
+    }
+    else
+    {
+      delete new_session;
+    }
+  }
+
+private:
+  boost::asio::io_service& io_service_;
+  tcp::acceptor acceptor_;
+};
+
+int main(int argc, char* argv[])
+{
+  try
+  {
+    boost::asio::io_service io_service;
+
+    using namespace std; // For atoi.
+    server s(io_service, 50001);
+
+    io_service.run();
+  }
+  catch (std::exception& e)
+  {
+    std::cerr << "Exception: " << e.what() << "\n";
+  }
+
+  return 0;
+}
+
+*/
